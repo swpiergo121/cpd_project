@@ -1,0 +1,16 @@
+{
+    "op": "union",
+    "function": "",
+    "childs": [
+        {
+            "op": "",
+            "function": "(x+4)^2 + (y+5)^2 + (z+3)^2 - 4^2",
+            "childs": []
+        },
+        {
+            "op": "",
+            "function": "(x+7)^2 + (y+6)^2 + (z+5) - 2^2",
+            "childs": []
+        }
+    ]
+}
