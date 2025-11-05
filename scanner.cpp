@@ -45,10 +45,7 @@ Token *Scanner::nextToken() {
     }
 
     current++;
-
-  }
-
-  else if (strchr("[]{}\":,", c)) {
+  } else if (strchr("[]{}\":,", c)) {
     switch (c) {
     case ':':
       token = new Token(Token::DP, c);
@@ -90,14 +87,16 @@ Scanner::~Scanner() {}
 void test_scanner(Scanner *scanner) {
   Token *current;
   cout << "Iniciando Scanner:" << endl << endl;
+  int i = 0;
   while ((current = scanner->nextToken())->type != Token::END) {
     if (current->type == Token::ERR) {
       cout << "Error en scanner - carácter inválido: " << current->text << endl;
       break;
     } else {
-      cout << *current << endl;
+      cout << "i: " << i << ", token: " << *current << endl;
     }
     delete current;
+    i++;
   }
   cout << "TOKEN(END)" << endl;
   delete current;

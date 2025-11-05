@@ -105,11 +105,11 @@ void marching_cubes(string const &json_object_describing_curve,
                     double precision) {
 
   // parsing
-  Scanner scanner(json_object_describing_curve.c_str());
-  Parser parser(&scanner);
+  Scanner *scanner = new Scanner(json_object_describing_curve.c_str());
+  Parser *parser = new Parser(scanner);
   node *root;
   try {
-    root = parser.parse();
+    root = parser->parse();
     cout << "Parsing exitoso" << endl << endl;
   } catch (const exception &e) {
     cout << "Error durante la ejecución del parser: " << e.what() << endl;
@@ -161,7 +161,7 @@ int main() {
   float xmax = 20, ymax = 20, zmax = 20;
   float precision = 0.05;
 
-  string json_path = "example2.json";
+  string json_path = "examples/example1.json";
 
   ifstream infile(json_path);
   string input;
