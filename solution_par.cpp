@@ -7,9 +7,19 @@
 #include <omp.h>
 #include <string>
 #include <vector>
-#define NUM_THREADS 8
+
+const double FLOPS_PER_TRIAL = 81.0; // FLOPs geométricos aprox. por muestra
 
 using namespace std;
+
+struct Result {
+  int number_threads;
+  double secs_comp;
+  double secs_com;
+  double secs_total;
+  double gflops;
+  double triangles;
+};
 
 vector<float> interpolate(vector<float> const &p1, vector<float> const &p2,
                           float val1, float val2) {
@@ -49,6 +59,7 @@ void draw_curve(node *root, float xmin, float ymin, float zmin, float xmax,
     }
   }
 
+  // 2 flops per line, total of 6
   float midX = (xmin + xmax) / 2.0;
   float midY = (ymin + ymax) / 2.0;
   float midZ = (zmin + zmax) / 2.0;
@@ -77,10 +88,10 @@ void draw_curve(node *root, float xmin, float ymin, float zmin, float xmax,
   }
 }
 
-void marching_cubes(string const &json_object_describing_curve,
-                    string const &output_filename, double x_min, double y_min,
-                    double x_max, double y_max, double z_min, double z_max,
-                    double precision) {
+Result marching_cubes(string const &json_object_describing_curve,
+                      string const &output_filename, double x_min, double y_min,
+                      double x_max, double y_max, double z_min, double z_max,
+                      double precision, int nt) {
 
   // parsing
   Scanner *scanner = new Scanner(json_object_describing_curve.c_str());
@@ -106,10 +117,10 @@ void marching_cubes(string const &json_object_describing_curve,
   double step_z = (z_max - z_min) / num_cells_z;
 
   // Diferent vectors to join them later
-  vector<vector<vector<float>>> thread_local_meshes(NUM_THREADS);
+  vector<vector<vector<float>>> thread_local_meshes(nt);
 
   double t0 = omp_get_wtime();
-#pragma omp parallel num_threads(NUM_THREADS)
+#pragma omp parallel num_threads(nt)
   {
     int thread_id = omp_get_thread_num();
 
@@ -119,12 +130,15 @@ void marching_cubes(string const &json_object_describing_curve,
       for (int j = 0; j < num_cells_y; j++) {
         for (int k = 0; k < num_cells_z; k++) {
           // Calculate current cell boundaries
+          // 2 FLOPs per line, total of 6
           double cell_x_min = x_min + i * step_x;
           double cell_y_min = y_min + j * step_y;
           double cell_z_min = z_min + k * step_z;
+          // 1 FLOP per line, total of 3
           double cell_x_max = cell_x_min + step_x;
           double cell_y_max = cell_y_min + step_y;
           double cell_z_max = cell_z_min + step_z;
+          /// total of 9
           draw_curve(root, cell_x_min, cell_y_min, cell_z_min, cell_x_max,
                      cell_y_max, cell_z_max, thread_local_meshes[thread_id]);
         }
@@ -133,7 +147,7 @@ void marching_cubes(string const &json_object_describing_curve,
   }
   double t1 = omp_get_wtime();
 
-  for (int i = 0; i < NUM_THREADS; i++) {
+  for (int i = 0; i < nt; i++) {
     mesh_triangles.insert(mesh_triangles.end(), thread_local_meshes[i].begin(),
                           thread_local_meshes[i].end());
   }
@@ -141,8 +155,11 @@ void marching_cubes(string const &json_object_describing_curve,
   double t2 = omp_get_wtime();
   double secs_comp = t1 - t0;
   double secs_com = t2 - t1;
-  cout << "Tiempo computacional (s)      : " << secs_comp << "\n";
-  cout << "Tiempo reduce (s)      : " << secs_com << "\n\n";
+  double secs_total = t2 - t0;
+  double total_flops =
+      FLOPS_PER_TRIAL *
+      static_cast<double>(num_cells_x * num_cells_y * num_cells_z);
+  double gflops = (total_flops / secs_total) / 1e9;
 
   // Output
   ofstream ply_file(output_filename);
@@ -171,18 +188,43 @@ void marching_cubes(string const &json_object_describing_curve,
   }
 
   ply_file.close();
-  cout << "Generated " << mesh_triangles.size() / 3 << " triangles to "
-       << json_object_describing_curve << endl;
+
+  cout << "Tiempo computacional (s)      : " << secs_comp << "\n";
+  cout << "Tiempo reduce (s)      : " << secs_com << "\n";
+  cout << "Tiempo total (s)      : " << secs_total << "\n";
+  cout << "Rendimiento     : " << gflops << " GFLOP/s\n\n";
+  // cout << "Generated " << mesh_triangles.size() / 3 << " triangles to "
+  //      << json_object_describing_curve << endl;
+  double triangles = mesh_triangles.size() / 3;
+  return {nt, secs_comp, secs_com, secs_total, gflops, triangles};
+}
+
+void write_results_to_csv(const std::vector<Result> &results,
+                          const std::string &filename) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    throw std::runtime_error("Could not open file for writing: " + filename);
+  }
+
+  // Write header
+  file << "number_threads,secs_comp,secs_com,secs_total,gflops,triangles\n";
+
+  // Write each result
+  for (const auto &r : results) {
+    file << r.number_threads << "," << r.secs_comp << "," << r.secs_com << ","
+         << r.secs_total << "," << r.gflops << "," << r.triangles << "\n";
+  }
+
+  file.close();
 }
 
 int main() {
   // Honestly, it doesn't work that well. For union, the conections aren't very
   // precise. For intersection, there is a weird conversion of the biggest
   // sphere. For diff, it isn't very precise on the extremes
-  string output_file = "out.ply";
   float xmin = -5, ymin = -5, zmin = -5;
   float xmax = 20, ymax = 20, zmax = 20;
-  float precision = 0.10;
+  float precision = 0.50;
 
   string json_path = "examples/example1.json";
 
@@ -194,8 +236,17 @@ int main() {
   }
   infile.close();
 
-  marching_cubes(input, output_file, xmin, ymin, xmax, ymax, zmin, zmax,
-                 precision);
+  vector<Result> results;
+  for (int i = 0; i < 8; i++) {
+    int num_threads = pow(2, i);
+    string output_file = "outputs/" + to_string(num_threads) + "_out.ply";
+    Result R = marching_cubes(input, output_file, xmin, ymin, xmax, ymax, zmin,
+                              zmax, precision, num_threads);
+    results.push_back(R);
+  }
+
+  string csv_path = "outputs/results.csv";
+  write_results_to_csv(results, csv_path);
 
   return 0;
 }
