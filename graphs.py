@@ -60,7 +60,7 @@ T1 = T1[0]
 df["speedup"] = T1 / df["secs_total"]
 
 # Plot 2: Speedup
-plt.subplot(1, 2, 2)
+plt.figure(figsize=(10, 6))
 plt.plot(
     df["number_threads"],
     df["speedup"],
@@ -78,4 +78,5 @@ plt.grid(True, which="both", ls="--")
 
 # Adjust layout and display
 plt.tight_layout()
-plt.show()
+# plt.show()
+plt.savefig("outputs/nthreads_vs_speedup.png")
