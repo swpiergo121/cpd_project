@@ -125,7 +125,8 @@ Result marching_cubes(string const &json_object_describing_curve,
     int thread_id = omp_get_thread_num();
 
 // Triple loop over the range for the
-#pragma omp for schedule(dynamic)
+// #pragma omp for schedule(dynamic)
+#pragma omp for collapse(3) schedule(dynamic)
     for (int i = 0; i < num_cells_x; i++) {
       for (int j = 0; j < num_cells_y; j++) {
         for (int k = 0; k < num_cells_z; k++) {
@@ -224,9 +225,9 @@ int main() {
   // sphere. For diff, it isn't very precise on the extremes
   float xmin = -5, ymin = -5, zmin = -5;
   float xmax = 20, ymax = 20, zmax = 20;
-  float precision = 0.50;
+  float precision = 0.05;
 
-  string json_path = "examples/example1.json";
+  string json_path = "examples/example4.json";
 
   ifstream infile(json_path);
   string input;
@@ -237,7 +238,7 @@ int main() {
   infile.close();
 
   vector<Result> results;
-  for (int i = 0; i < 8; i++) {
+  for (int i = 2; i < 7; i++) {
     int num_threads = pow(2, i);
     string output_file = "outputs/" + to_string(num_threads) + "_out.ply";
     Result R = marching_cubes(input, output_file, xmin, ymin, xmax, ymax, zmin,
@@ -245,7 +246,7 @@ int main() {
     results.push_back(R);
   }
 
-  string csv_path = "outputs/results.csv";
+  string csv_path = "outputs/results_t2.csv";
   write_results_to_csv(results, csv_path);
 
   return 0;
